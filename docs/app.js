@@ -347,6 +347,9 @@ function beginImageReceive() {
  */
 function processImageChunk(chunk) {
   const packets = packetReceiver.push(chunk);
+  for (const error of packetReceiver.drainErrors()) {
+    log(error, "warn");
+  }
 
   for (const packet of packets) {
     resetPacketTimeout();

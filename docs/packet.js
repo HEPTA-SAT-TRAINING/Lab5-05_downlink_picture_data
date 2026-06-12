@@ -127,10 +127,19 @@ export class PacketReceiver {
   constructor() {
     /** @type {Uint8Array} */
     this.buffer = new Uint8Array(0);
+    /** @type {string[]} */
+    this.errors = [];
   }
 
   reset() {
     this.buffer = new Uint8Array(0);
+    this.errors = [];
+  }
+
+  drainErrors() {
+    const errors = this.errors;
+    this.errors = [];
+    return errors;
   }
 
   /**
@@ -183,7 +192,13 @@ export class PacketReceiver {
       const raw = this.buffer.subarray(0, packetSize);
       try {
         packets.push(parsePacket(raw));
-      } catch {
+      } catch (err) {
+        const seq = readLe16(
+          new DataView(raw.buffer, raw.byteOffset, raw.byteLength),
+          3
+        );
+        const message = err instanceof Error ? err.message : String(err);
+        this.errors.push(`Discarded packet seq=${seq}: ${message}`);
         // False MAGIC in stream: skip one byte and resync
         this.buffer = this.buffer.subarray(1);
         continue;
