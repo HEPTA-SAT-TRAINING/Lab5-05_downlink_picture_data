@@ -1,5 +1,6 @@
 import { SerialConnection, formatPortLabel } from "./serial.js";
 import { crc16CcittFalse, verifyCrc16SelfTest } from "./crc16.js";
+import { ByteLineBuffer } from "./byte_line_buffer.js";
 import {
   PacketReceiver,
   parseStartPayload,
@@ -31,8 +32,8 @@ const serial = new SerialConnection();
 const packetReceiver = new PacketReceiver();
 
 let rxState = RxState.TEXT_MODE;
-/** @type {string} */
-let textBuffer = "";
+const textBuffer = new ByteLineBuffer();
+const textDecoder = new TextDecoder();
 let imageReceiving = false;
 let expectedSeq = 0;
 let expectedTotal = 0;
@@ -255,21 +256,15 @@ function onSerialChunk(chunk) {
  * @param {Uint8Array} chunk
  */
 function processTextChunk(chunk) {
-  textBuffer += new TextDecoder("latin1").decode(chunk);
+  textBuffer.push(chunk);
 
   while (true) {
-    const lfIndex = textBuffer.indexOf("\n");
-    if (lfIndex < 0) {
+    const lineBytes = textBuffer.shiftLine();
+    if (lineBytes === null) {
       break;
     }
 
-    let line = textBuffer.slice(0, lfIndex);
-    textBuffer = textBuffer.slice(lfIndex + 1);
-
-    // Strip CR if present
-    if (line.endsWith("\r")) {
-      line = line.slice(0, -1);
-    }
+    const line = textDecoder.decode(lineBytes);
 
     if (line === "IMG_BEGIN" || line === "IMG_END") {
       if (line === "IMG_END") {
@@ -277,10 +272,9 @@ function processTextChunk(chunk) {
         continue;
       }
       beginImageReceive();
-      // Remaining textBuffer may contain binary packet data
-      if (textBuffer.length > 0) {
-        const remainder = new TextEncoder().encode(textBuffer);
-        textBuffer = "";
+      // Preserve binary bytes that arrived in the same serial chunk.
+      const remainder = textBuffer.takeRemaining();
+      if (remainder.length > 0) {
         processImageChunk(remainder);
       }
       return;
