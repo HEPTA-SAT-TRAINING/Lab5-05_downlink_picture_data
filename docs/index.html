@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HEPTA-SAT Web Serial Viewer</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>HEPTA-SAT Web Serial Viewer</h1>
+    <p class="subtitle">HK / Accelerometer / JPEG downlink receiver</p>
+  </header>
+
+  <section class="panel connection-panel">
+    <h2>Connection</h2>
+    <div class="row">
+      <label for="port-select">COM Port:</label>
+      <select id="port-select">
+        <option value="" disabled selected>No port selected</option>
+      </select>
+      <button id="btn-add-port" type="button">Add Port</button>
+      <button id="btn-refresh-ports" type="button" title="Refresh port list">Refresh</button>
+      <button id="btn-connect" type="button" disabled>Connect</button>
+      <button id="btn-disconnect" type="button" disabled>Disconnect</button>
+      <label for="baudrate">Baudrate:</label>
+      <input id="baudrate" type="number" value="9600" min="300" max="921600" step="1">
+      <span id="connection-status" class="status-badge disconnected">Disconnected</span>
+    </div>
+    <p class="hint">Use <strong>Add Port</strong> to grant access to a COM port. Previously authorized ports appear in the dropdown.</p>
+  </section>
+
+  <section class="panel command-panel">
+    <h2>Commands</h2>
+    <div class="row">
+      <button id="btn-send-a" type="button" disabled>Send a: Accel</button>
+      <button id="btn-send-p" type="button" disabled>Send p: Picture</button>
+      <button id="btn-clear-log" type="button">Clear Log</button>
+    </div>
+  </section>
+
+  <div class="grid">
+    <section class="panel">
+      <h2>HK</h2>
+      <dl class="data-grid" id="hk-panel">
+        <dt>TEMP</dt><dd id="hk-temp">—</dd>
+        <dt>VBAT</dt><dd id="hk-vbat">—</dd>
+        <dt>V5</dt><dd id="hk-v5">—</dd>
+        <dt>V3V3</dt><dd id="hk-v3v3">—</dd>
+        <dt>SAP</dt><dd id="hk-sap">—</dd>
+        <dt>IDIS</dt><dd id="hk-idis">—</dd>
+        <dt>ICHG</dt><dd id="hk-ichg">—</dd>
+      </dl>
+    </section>
+
+    <section class="panel">
+      <h2>Accel</h2>
+      <dl class="data-grid" id="accel-panel">
+        <dt>AX</dt><dd id="accel-ax">—</dd>
+        <dt>AY</dt><dd id="accel-ay">—</dd>
+        <dt>AZ</dt><dd id="accel-az">—</dd>
+      </dl>
+    </section>
+
+    <section class="panel image-panel">
+      <h2>Image</h2>
+      <div id="image-status" class="image-status">No image received</div>
+      <div class="progress-row">
+        <span>Progress:</span>
+        <span id="image-progress">0 / 0 bytes</span>
+      </div>
+      <div class="image-preview-wrap">
+        <img id="image-preview" alt="JPEG preview" hidden>
+      </div>
+      <button id="btn-save-jpeg" type="button" disabled>Save JPEG</button>
+    </section>
+  </div>
+
+  <section class="panel log-panel">
+    <h2>Log</h2>
+    <pre id="log" class="log" aria-live="polite"></pre>
+  </section>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
