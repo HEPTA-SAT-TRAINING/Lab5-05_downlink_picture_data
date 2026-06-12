@@ -16,8 +16,8 @@ const RxState = {
   IMAGE_PACKET_RX: "IMAGE_PACKET_RX",
 };
 
-const PACKET_TIMEOUT_MS = 3000;
-const IMAGE_TIMEOUT_MS = 30000;
+const PACKET_TIMEOUT_MS = 10000;
+const IMAGE_TIMEOUT_MS = 60000;
 
 const HK_RE =
   /^TEMP=([-\d.]+),VBAT=([-\d.]+),V5=([-\d.]+),V3V3=([-\d.]+),SAP=([-\d.]+),IDIS=([-\d.]+),ICHG=([-\d.]+)/;

@@ -40,12 +40,9 @@ void downlink_accel_data(void) {
 
 void setup() {
   cdh.begin();
-  cdh.wait_for_serial();
-
   eps.init();
   eps.switch_3V3_on();
   sensor.begin();
-
   com.begin(9600);
 
   cdh.println("XBee downlink started (HK: 1s interval, 'a'=accel, 'p'=picture)");
