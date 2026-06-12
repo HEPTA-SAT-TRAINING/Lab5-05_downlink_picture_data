@@ -9,7 +9,7 @@ Connect your HEPTA-SAT via USB after flashing the firmware, then open the URL be
 **https://hepta-sat-training.github.io/Lab5-05_downlink_picture_data/**
 
 1. **Add Port** → select your COM port
-2. Leave baud rate at **9600**, then click **Connect**
+2. Leave baud rate at **57600**, then click **Connect**
 3. Confirm HK telemetry, then use **Send a** (accelerometer) or **Send p** (image)
 
 See [docs/README.md](docs/README.md) for details.

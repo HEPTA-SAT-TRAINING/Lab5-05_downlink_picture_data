@@ -43,7 +43,7 @@ void setup() {
   eps.init();
   eps.switch_3V3_on();
   sensor.begin();
-  com.begin(9600);
+  com.begin();
 
   cdh.println("XBee downlink started (HK: 1s interval, 'a'=accel, 'p'=picture)");
 }

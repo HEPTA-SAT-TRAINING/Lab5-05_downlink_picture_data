@@ -16,7 +16,7 @@ https://hepta-sat-training.github.io/Lab5-05_downlink_picture_data/
 
 - **Browser**: Chrome or Edge (Web Serial API support)
 - **Connection**: HTTPS or `localhost` (secure context required)
-- **Default baud rate**: **9600** (matches firmware `com.begin(9600)`)
+- **Default baud rate**: **57600** (matches the fixed HEPTA COM setting)
 
 ## Local development
 
@@ -95,6 +95,6 @@ docs/
 ## Troubleshooting
 
 - **Cannot connect**: Use Chrome/Edge and open the page over HTTPS or `localhost`
-- **HK not updating**: Confirm baud rate is 9600 (changeable in the UI)
+- **HK not updating**: Confirm baud rate is 57600 and both XBee modules use `BD=6`
 - **Image error**: Check the cable connection and press **Send p** again (retransmit is not supported)
 - **Packet timeout**: If communication drops during image receive, the transfer times out after 3 seconds
