@@ -16,7 +16,7 @@ https://hepta-sat-training.github.io/Lab5-05_downlink_picture_data/
 
 - **Browser**: Chrome or Edge (Web Serial API support)
 - **Connection**: HTTPS or `localhost` (secure context required)
-- **Default baud rate**: **57600** (matches the fixed HEPTA COM setting)
+- **Default baud rate**: **38400** (matches the fixed HEPTA COM setting)
 
 ## Local development
 
@@ -59,12 +59,15 @@ Image transfer sequence:
 ```text
 IMG_BEGIN\n
 START packet (TYPE=0x01)
-DATA packets (TYPE=0x02, payload max 512 bytes)
+DATA packets (TYPE=0x02, transmitter payload 64 bytes)
 END packet (TYPE=0x03)
 \nIMG_END\n
 ```
 
-Packet format: MAGIC `HP` + TYPE + SEQ + TOTAL + LEN + CRC16 + PAYLOAD (little endian, CRC-16/CCITT-FALSE).
+Packet format: MAGIC `HP` + TYPE + SEQ + TOTAL + LEN + CRC16 + PAYLOAD
+(little endian, CRC-16/CCITT-FALSE). The browser accepts payloads up to 512
+bytes for compatibility, while the firmware sends 64-byte payloads to avoid
+long bursts through the transparent-mode XBee link.
 
 For details, see [hepta_image_serial_web_plan.md](../hepta_image_serial_web_plan.md) in the repository root.
 
@@ -95,6 +98,6 @@ docs/
 ## Troubleshooting
 
 - **Cannot connect**: Use Chrome/Edge and open the page over HTTPS or `localhost`
-- **HK not updating**: Confirm baud rate is 57600 and both XBee modules use `BD=6`
+- **HK not updating**: Confirm baud rate is 38400 and both XBee modules use `BD=5`
 - **Image error**: Check the cable connection and press **Send p** again (retransmit is not supported)
 - **Packet timeout**: If communication drops during image receive, the transfer times out after 3 seconds

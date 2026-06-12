@@ -41,7 +41,7 @@ TEST_JPEG = bytes([
     0x7F, 0xFF, 0xD9,
 ])
 
-PAYLOAD_MAX = 512
+PAYLOAD_MAX = 64
 
 
 def main() -> int:
@@ -59,20 +59,34 @@ def main() -> int:
     data_packet_count = (image_size + PAYLOAD_MAX - 1) // PAYLOAD_MAX
     total_packet_count = data_packet_count + 2
 
-    if total_packet_count != 3:
+    expected_data_packet_count = 3
+    expected_total_packet_count = expected_data_packet_count + 2
+    if total_packet_count != expected_total_packet_count:
         print(
-            f"FAIL: test JPEG total_packet_count={total_packet_count}, expected 3"
+            "FAIL: test JPEG "
+            f"total_packet_count={total_packet_count}, "
+            f"expected {expected_total_packet_count}"
         )
         failures += 1
     else:
-        print("PASS: test JPEG packet count (START + 1 DATA + END)")
+        print(
+            "PASS: test JPEG packet count "
+            f"(START + {data_packet_count} DATA + END)"
+        )
 
     start_payload = struct.pack("<BHIH", 0x01, 0, image_size, image_crc)
     start_crc = calc_packet_crc(0x01, 0, total_packet_count, len(start_payload), start_payload)
     print(f"INFO: START packet CRC=0x{start_crc:04X}, image_crc=0x{image_crc:04X}")
 
-    data_len = image_size
-    data_crc = calc_packet_crc(0x02, 1, total_packet_count, data_len, TEST_JPEG)
+    first_data_payload = TEST_JPEG[:PAYLOAD_MAX]
+    data_len = len(first_data_payload)
+    data_crc = calc_packet_crc(
+        0x02,
+        1,
+        total_packet_count,
+        data_len,
+        first_data_payload,
+    )
     print(f"INFO: DATA packet CRC=0x{data_crc:04X}, len={data_len}")
 
     end_crc = calc_packet_crc(0x03, total_packet_count - 1, total_packet_count, 0, b"")
