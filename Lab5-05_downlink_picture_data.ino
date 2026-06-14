@@ -62,7 +62,6 @@ void loop() {
       cdh.printf("downlink picture data\r\n");
       hk_enable = false;
       if (!sensor.camera_snapshot(PICTURE_FILENAME)) {
-        sensor.camera_invalidate();
         com.send_image_error(HeptaCom::IMAGE_ERROR_CAPTURE_FAILED);
       } else {
         com.downlink_image_file(PICTURE_FILENAME);
