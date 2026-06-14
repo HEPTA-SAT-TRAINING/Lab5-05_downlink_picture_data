@@ -45,4 +45,11 @@ assert.equal(errors.length, 1);
 assert.match(errors[0], /^Discarded packet seq=1: CRC mismatch:/);
 assert.deepEqual(receiver.drainErrors(), []);
 
+const footer = new TextEncoder().encode("\nIMG_END\n");
+receiver.reset();
+receiver.push(footer.subarray(0, 4));
+assert.equal(receiver.drainFooterCount(), 0);
+receiver.push(footer.subarray(4));
+assert.equal(receiver.drainFooterCount(), 1);
+
 console.log("PASS: discarded packet diagnostics identify sequence and CRC error");

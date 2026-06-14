@@ -9,6 +9,7 @@ export const PACKET_TYPE_START = 0x01;
 export const PACKET_TYPE_DATA = 0x02;
 export const PACKET_TYPE_END = 0x03;
 export const PACKET_TYPE_ERROR = 0x04;
+export const PACKET_TYPE_PARITY = 0x05;
 
 export const FORMAT_JPEG = 0x01;
 
@@ -104,11 +105,11 @@ export function parsePacket(headerAndPayload) {
 }
 
 /**
- * @param {Uint8Array} payload - START packet payload (9 bytes)
- * @returns {{ format: number, imageId: number, imageSize: number, imageCrc16: number }}
+ * @param {Uint8Array} payload - START packet payload (11 bytes)
+ * @returns {{ format: number, imageId: number, imageSize: number, imageCrc16: number, dataPayloadSize: number }}
  */
 export function parseStartPayload(payload) {
-  if (payload.length < 9) {
+  if (payload.length < 11) {
     throw new Error("START payload too short");
   }
   const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
@@ -117,6 +118,7 @@ export function parseStartPayload(payload) {
     imageId: readLe16(view, 1),
     imageSize: readLe32(view, 3),
     imageCrc16: readLe16(view, 7),
+    dataPayloadSize: readLe16(view, 9),
   };
 }
 
@@ -129,17 +131,25 @@ export class PacketReceiver {
     this.buffer = new Uint8Array(0);
     /** @type {string[]} */
     this.errors = [];
+    this.footerCount = 0;
   }
 
   reset() {
     this.buffer = new Uint8Array(0);
     this.errors = [];
+    this.footerCount = 0;
   }
 
   drainErrors() {
     const errors = this.errors;
     this.errors = [];
     return errors;
+  }
+
+  drainFooterCount() {
+    const count = this.footerCount;
+    this.footerCount = 0;
+    return count;
   }
 
   /**
@@ -160,12 +170,15 @@ export class PacketReceiver {
 
     while (true) {
       const magicIndex = this.findMagic();
+      const footerIndex = this.findFooter();
+      if (footerIndex >= 0 && (magicIndex < 0 || footerIndex < magicIndex)) {
+        this.buffer = this.buffer.subarray(footerIndex + 9);
+        this.footerCount += 1;
+        break;
+      }
+
       if (magicIndex < 0) {
-        // Keep last byte in case it's start of 'H'
-        if (this.buffer.length > 1) {
-          const last = this.buffer[this.buffer.length - 1];
-          this.buffer = last === PACKET_MAGIC_0 ? new Uint8Array([last]) : new Uint8Array(0);
-        }
+        this.buffer = this.trailingMarkerPrefix();
         break;
       }
 
@@ -220,5 +233,46 @@ export class PacketReceiver {
       }
     }
     return -1;
+  }
+
+  findFooter() {
+    const marker = [0x0A, 0x49, 0x4D, 0x47, 0x5F, 0x45, 0x4E, 0x44, 0x0A];
+    outer:
+    for (let i = 0; i <= this.buffer.length - marker.length; i++) {
+      for (let j = 0; j < marker.length; j++) {
+        if (this.buffer[i + j] !== marker[j]) {
+          continue outer;
+        }
+      }
+      return i;
+    }
+    return -1;
+  }
+
+  trailingMarkerPrefix() {
+    const markers = [
+      [PACKET_MAGIC_0, PACKET_MAGIC_1],
+      [0x0A, 0x49, 0x4D, 0x47, 0x5F, 0x45, 0x4E, 0x44, 0x0A],
+    ];
+    let keep = 0;
+    for (const marker of markers) {
+      const maxLength = Math.min(this.buffer.length, marker.length - 1);
+      for (let length = maxLength; length > keep; length--) {
+        let matches = true;
+        for (let i = 0; i < length; i++) {
+          if (this.buffer[this.buffer.length - length + i] !== marker[i]) {
+            matches = false;
+            break;
+          }
+        }
+        if (matches) {
+          keep = length;
+          break;
+        }
+      }
+    }
+    return keep > 0
+      ? this.buffer.slice(this.buffer.length - keep)
+      : new Uint8Array(0);
   }
 }

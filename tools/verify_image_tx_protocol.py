@@ -57,10 +57,10 @@ def main() -> int:
     image_size = len(TEST_JPEG)
     image_crc = crc16_ccitt_false(TEST_JPEG)
     data_packet_count = (image_size + PAYLOAD_MAX - 1) // PAYLOAD_MAX
-    total_packet_count = data_packet_count + 2
+    total_packet_count = data_packet_count + 3
 
     expected_data_packet_count = 3
-    expected_total_packet_count = expected_data_packet_count + 2
+    expected_total_packet_count = expected_data_packet_count + 3
     if total_packet_count != expected_total_packet_count:
         print(
             "FAIL: test JPEG "
@@ -71,10 +71,10 @@ def main() -> int:
     else:
         print(
             "PASS: test JPEG packet count "
-            f"(START + {data_packet_count} DATA + END)"
+            f"(START + {data_packet_count} DATA + PARITY + END)"
         )
 
-    start_payload = struct.pack("<BHIH", 0x01, 0, image_size, image_crc)
+    start_payload = struct.pack("<BHIHH", 0x01, 0, image_size, image_crc, PAYLOAD_MAX)
     start_crc = calc_packet_crc(0x01, 0, total_packet_count, len(start_payload), start_payload)
     print(f"INFO: START packet CRC=0x{start_crc:04X}, image_crc=0x{image_crc:04X}")
 
@@ -88,6 +88,16 @@ def main() -> int:
         first_data_payload,
     )
     print(f"INFO: DATA packet CRC=0x{data_crc:04X}, len={data_len}")
+
+    parity = bytearray(PAYLOAD_MAX)
+    for offset in range(0, image_size, PAYLOAD_MAX):
+        for index, byte in enumerate(TEST_JPEG[offset:offset + PAYLOAD_MAX]):
+            parity[index] ^= byte
+    parity_seq = data_packet_count + 1
+    parity_crc = calc_packet_crc(
+        0x05, parity_seq, total_packet_count, len(parity), bytes(parity)
+    )
+    print(f"INFO: PARITY packet CRC=0x{parity_crc:04X}, len={len(parity)}")
 
     end_crc = calc_packet_crc(0x03, total_packet_count - 1, total_packet_count, 0, b"")
     print(f"INFO: END packet CRC=0x{end_crc:04X}")

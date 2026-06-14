@@ -58,8 +58,9 @@ Image transfer sequence:
 
 ```text
 IMG_BEGIN\n
-START packet (TYPE=0x01)
+START packet x2 (TYPE=0x01, duplicate control packet)
 DATA packets (TYPE=0x02, transmitter payload 64 bytes)
+XOR parity packet (TYPE=0x05)
 END packet (TYPE=0x03)
 \nIMG_END\n
 ```
@@ -68,6 +69,10 @@ Packet format: MAGIC `HP` + TYPE + SEQ + TOTAL + LEN + CRC16 + PAYLOAD
 (little endian, CRC-16/CCITT-FALSE). The browser accepts payloads up to 512
 bytes for compatibility, while the firmware sends 64-byte payloads to avoid
 long bursts through the transparent-mode XBee link.
+
+The duplicated START packet and XOR parity packet allow the receiver to recover
+from any single lost or CRC-discarded protocol packet. If END is lost, the
+`IMG_END` framing marker completes the transfer after the image CRC is checked.
 
 For details, see [hepta_image_serial_web_plan.md](../hepta_image_serial_web_plan.md) in the repository root.
 
@@ -91,6 +96,7 @@ docs/
   serial.js    Web Serial connection
   crc16.js     CRC-16/CCITT-FALSE
   packet.js    Binary packet parser
+  image_assembler.js  Loss-tolerant image reconstruction
   app.js       State machine and UI updates
   README.md    This file
 ```
@@ -99,5 +105,5 @@ docs/
 
 - **Cannot connect**: Use Chrome/Edge and open the page over HTTPS or `localhost`
 - **HK not updating**: Confirm baud rate is 38400 and both XBee modules use `BD=5`
-- **Image error**: Check the cable connection and press **Send p** again (retransmit is not supported)
+- **Image error**: A single packet loss is recovered automatically. For multiple losses, check the cable connection and press **Send p** again
 - **Packet timeout**: If communication drops during image receive, the transfer times out after 3 seconds

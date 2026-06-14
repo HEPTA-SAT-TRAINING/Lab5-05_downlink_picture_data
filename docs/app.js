@@ -1,14 +1,11 @@
 import { SerialConnection, formatPortLabel } from "./serial.js";
-import { crc16CcittFalse, verifyCrc16SelfTest } from "./crc16.js";
+import { verifyCrc16SelfTest } from "./crc16.js";
 import { ByteLineBuffer } from "./byte_line_buffer.js";
+import { ImageAssembler } from "./image_assembler.js";
 import {
   PacketReceiver,
-  parseStartPayload,
-  PACKET_TYPE_START,
-  PACKET_TYPE_DATA,
   PACKET_TYPE_END,
   PACKET_TYPE_ERROR,
-  FORMAT_JPEG,
   ERROR_MESSAGES,
 } from "./packet.js";
 
@@ -30,18 +27,12 @@ const serial = new SerialConnection();
 
 /** @type {PacketReceiver} */
 const packetReceiver = new PacketReceiver();
+const imageAssembler = new ImageAssembler();
 
 let rxState = RxState.TEXT_MODE;
 const textBuffer = new ByteLineBuffer();
 const textDecoder = new TextDecoder();
 let imageReceiving = false;
-let expectedSeq = 0;
-let expectedTotal = 0;
-/** @type {{ format: number, imageId: number, imageSize: number, imageCrc16: number } | null} */
-let imageMeta = null;
-/** @type {Uint8Array[]} */
-let imageChunks = [];
-let receivedBytes = 0;
 /** @type {Blob | null} */
 let currentImageBlob = null;
 let lastImageId = 0;
@@ -318,11 +309,7 @@ function beginImageReceive() {
   rxState = RxState.IMAGE_PACKET_RX;
   imageReceiving = true;
   packetReceiver.reset();
-  imageMeta = null;
-  imageChunks = [];
-  receivedBytes = 0;
-  expectedSeq = 0;
-  expectedTotal = 0;
+  imageAssembler.reset();
 
   if (currentImageBlob) {
     URL.revokeObjectURL(el.imagePreview.src);
@@ -361,6 +348,18 @@ function processImageChunk(chunk) {
       abortImageReceive(`Packet error: ${msg}`);
       return;
     }
+    if (!imageReceiving) {
+      break;
+    }
+  }
+
+  if (imageReceiving && packetReceiver.drainFooterCount() > 0) {
+    try {
+      completeImageReceive("IMG_END fallback");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      abortImageReceive(`Image error: ${msg}`);
+    }
   }
 }
 
@@ -368,105 +367,45 @@ function processImageChunk(chunk) {
  * @param {ReturnType<import("./packet.js").parsePacket>} packet
  */
 function handleImagePacket(packet) {
-  if (expectedTotal > 0 && packet.total !== expectedTotal) {
-    throw new Error(
-      `TOTAL mismatch: expected ${expectedTotal}, got ${packet.total}`
+  if (packet.type === PACKET_TYPE_ERROR) {
+    handleErrorPacket(packet);
+    return;
+  }
+  const hadMeta = imageAssembler.meta !== null;
+  imageAssembler.accept(packet);
+  if (!hadMeta && imageAssembler.meta) {
+    const meta = imageAssembler.meta;
+    el.imageProgress.textContent = `0 / ${meta.imageSize} bytes`;
+    log(
+      `START: id=${meta.imageId}, size=${meta.imageSize}, image_crc=0x${meta.imageCrc16.toString(16).padStart(4, "0")}, total_packets=${packet.total}`
     );
   }
-
-  if (packet.seq !== expectedSeq) {
-    throw new Error(
-      `SEQ mismatch: expected ${expectedSeq}, got ${packet.seq}`
-    );
+  if (imageAssembler.meta) {
+    el.imageProgress.textContent =
+      `${imageAssembler.receivedBytes()} / ${imageAssembler.meta.imageSize} bytes`;
   }
-
-  switch (packet.type) {
-    case PACKET_TYPE_START:
-      handleStartPacket(packet);
-      break;
-    case PACKET_TYPE_DATA:
-      handleDataPacket(packet);
-      break;
-    case PACKET_TYPE_END:
-      handleEndPacket(packet);
-      break;
-    case PACKET_TYPE_ERROR:
-      handleErrorPacket(packet);
-      break;
-    default:
-      throw new Error(`Unknown packet TYPE 0x${packet.type.toString(16)}`);
+  if (packet.type === PACKET_TYPE_END) {
+    completeImageReceive("END packet");
   }
 }
 
-/**
- * @param {{ type: number, seq: number, total: number, len: number, payload: Uint8Array }} packet
- */
-function handleStartPacket(packet) {
-  const meta = parseStartPayload(packet.payload);
-  if (meta.format !== FORMAT_JPEG) {
-    throw new Error(`Unsupported image format 0x${meta.format.toString(16)}`);
-  }
-
-  imageMeta = meta;
-  expectedTotal = packet.total;
-  expectedSeq = 1;
-
-  el.imageProgress.textContent = `0 / ${meta.imageSize} bytes`;
-  log(
-    `START: id=${meta.imageId}, size=${meta.imageSize}, image_crc=0x${meta.imageCrc16.toString(16).padStart(4, "0")}, total_packets=${packet.total}`
-  );
-}
-
-/**
- * @param {{ payload: Uint8Array }} packet
- */
-function handleDataPacket(packet) {
-  if (!imageMeta) {
-    throw new Error("DATA packet before START");
-  }
-
-  imageChunks.push(packet.payload);
-  receivedBytes += packet.payload.length;
-  expectedSeq += 1;
-
-  el.imageProgress.textContent = `${receivedBytes} / ${imageMeta.imageSize} bytes`;
-}
-
-/**
- * @param {{ seq: number, total: number }} packet
- */
-function handleEndPacket(packet) {
-  if (!imageMeta) {
-    throw new Error("END packet before START");
-  }
-
-  if (receivedBytes !== imageMeta.imageSize) {
-    throw new Error(
-      `Size mismatch: received ${receivedBytes}, expected ${imageMeta.imageSize}`
-    );
-  }
-
-  const imageBytes = concatChunks(imageChunks, receivedBytes);
-  const computedCrc = crc16CcittFalse(imageBytes);
-
-  if (computedCrc !== imageMeta.imageCrc16) {
-    throw new Error(
-      `Image CRC mismatch: expected 0x${imageMeta.imageCrc16.toString(16).padStart(4, "0")}, got 0x${computedCrc.toString(16).padStart(4, "0")}`
-    );
-  }
-
-  lastImageId = imageMeta.imageId;
-  currentImageBlob = new Blob([imageBytes], { type: "image/jpeg" });
+function completeImageReceive(terminalSource) {
+  const result = imageAssembler.finalize();
+  lastImageId = result.meta.imageId;
+  currentImageBlob = new Blob([result.image], { type: "image/jpeg" });
   const url = URL.createObjectURL(currentImageBlob);
   el.imagePreview.src = url;
   el.imagePreview.hidden = false;
   el.btnSaveJpeg.disabled = false;
 
-  el.imageStatus.textContent = `Image received (${imageMeta.imageSize} bytes, id=${imageMeta.imageId})`;
+  const recoveryText =
+    result.recoveredSeq === null ? "" : `, recovered packet ${result.recoveredSeq}`;
+  el.imageStatus.textContent =
+    `Image received (${result.meta.imageSize} bytes, id=${result.meta.imageId}${recoveryText})`;
   el.imageStatus.className = "image-status success";
 
   log(
-    `Image complete: ${imageMeta.imageSize} bytes, CRC OK (0x${computedCrc.toString(16).padStart(4, "0")})`
+    `Image complete via ${terminalSource}: ${result.meta.imageSize} bytes, CRC OK (0x${result.computedCrc.toString(16).padStart(4, "0")})${recoveryText}`
   );
 
   finishImageReceive();
@@ -481,21 +420,6 @@ function handleErrorPacket(packet) {
   abortImageReceive(`ERROR packet: ${desc} (0x${code.toString(16).padStart(2, "0")})`);
 }
 
-/**
- * @param {Uint8Array[]} chunks
- * @param {number} totalLength
- * @returns {Uint8Array}
- */
-function concatChunks(chunks, totalLength) {
-  const out = new Uint8Array(totalLength);
-  let offset = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return out;
-}
-
 function flushPacketBufferToText() {
   if (packetReceiver.buffer.length > 0) {
     processTextChunk(packetReceiver.buffer);
@@ -507,11 +431,7 @@ function finishImageReceive() {
   clearTimeouts();
   rxState = RxState.TEXT_MODE;
   imageReceiving = false;
-  imageMeta = null;
-  imageChunks = [];
-  receivedBytes = 0;
-  expectedSeq = 0;
-  expectedTotal = 0;
+  imageAssembler.reset();
   flushPacketBufferToText();
   setConnectionUi(true);
   log("Image receive complete — back to TEXT_MODE");
@@ -535,11 +455,7 @@ function resetImageReceive(reason) {
   rxState = RxState.TEXT_MODE;
   imageReceiving = false;
   flushPacketBufferToText();
-  imageMeta = null;
-  imageChunks = [];
-  receivedBytes = 0;
-  expectedSeq = 0;
-  expectedTotal = 0;
+  imageAssembler.reset();
   setConnectionUi(serial.isConnected);
   if (reason) {
     el.imageStatus.textContent = reason;

@@ -6,7 +6,14 @@ const root = new URL("..", import.meta.url).pathname.replace(/^\/([A-Z]:)/, "$1"
 const checks = [
   {
     file: "src/common/hepta_image_tx.cpp",
-    mustInclude: ["send_test_jpeg", "send_jpeg_file", "crc16_ccitt_false", "IMG_BEGIN"],
+    mustInclude: [
+      "send_test_jpeg",
+      "send_jpeg_file",
+      "crc16_ccitt_false",
+      "kPacketTypeParity",
+      "send_data_and_parity_from_file",
+      "IMG_BEGIN",
+    ],
   },
   {
     file: "src/common/hepta_com_base.cpp",
